@@ -222,3 +222,4 @@ runs/
 dataset/
 *.pt
 
+api_detection_result.jpg

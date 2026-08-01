@@ -1,0 +1,5 @@
+[tool.pyrefly]
+# Buscar paquetes de terceros en el entorno virtual del proyecto
+venv_path = "venv"
+# Rutas de modulos adicionales para resolver imports
+search_path = [".", "api", "api/src"]

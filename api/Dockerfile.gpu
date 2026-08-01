@@ -1,0 +1,38 @@
+# Imagen base ligera de CUDA 12 con Ubuntu 22.04
+FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04
+
+# Evitar prompts interactivos durante la instalacion de paquetes
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Instalar Python 3.11 y dependencias del sistema requeridas por OpenCV
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3-pip \
+    python3.11-dev \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Establecer alias para python3.11
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python
+
+WORKDIR /app
+
+# Copiar requirements de la API e instalar PyTorch con soporte CUDA 12.1 y dependencias
+COPY api/requirements.txt /app/requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121 && \
+    python -m pip install --no-cache-dir -r /app/requirements.txt
+
+# Copiar el codigo de la API
+COPY api/src /app/src
+
+EXPOSE 8000
+
+# Comando de inicio del servidor FastAPI con Uvicorn
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

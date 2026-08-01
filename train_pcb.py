@@ -28,16 +28,16 @@ def train():
 
     # 4. Hiperparametros optimizados para 4 GB VRAM (GTX 1650)
     print("[INFO] Iniciando entrenamiento con hiperparametros optimizados para 4 GB VRAM...")
-    results = model.train(
+    _ = model.train(
         data=yaml_path,
-        epochs=15,             # Epocas de entrenamiento
+        epochs=25,             # Epocas de entrenamiento
         imgsz=640,             # Resolucion de imagen (640x640)
-        batch=8 if cuda_available else 4, # Batch size seguro para 4GB VRAM
-        amp=cuda_available,    # Automatic Mixed Precision (FP16) para ahorrar 50% VRAM
-        workers=2,             # Numero de hilos del data loader para Windows
+        batch=4,               # Batch reducido: AMP no es estable en GTX 1650, FP32 usa mas VRAM
+        amp=False,             # Desactivado: GTX 1650 causa NaN con AMP segun Ultralytics
+        workers=0,             # 0 en Windows para evitar bloqueos de multiprocessing
         device=device,         # GPU 0
-        project="runs",
-        name="detect/pcb_defect_yolov10",
+        project="runs/detect",
+        name="pcb_defect_yolov10",
         exist_ok=True,
         save=True,
         plots=True
@@ -45,7 +45,7 @@ def train():
     
     print("\n" + "=" * 60)
     print("[OK] Entrenamiento completado!")
-    print("📁 Los pesos optimizados y las graficas se guardaron en:")
+    print("[OUTPUT] Los pesos optimizados y las graficas se guardaron en:")
     print("   runs/detect/pcb_defect_yolov10/")
     print("=" * 60)
 

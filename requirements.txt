@@ -6,3 +6,8 @@ torchvision
 matplotlib
 numpy
 roboflow
+fastapi
+uvicorn
+python-multipart
+huggingface_hub
+requests

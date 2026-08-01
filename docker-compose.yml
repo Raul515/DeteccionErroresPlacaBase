@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  pcb-detector-api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.gpu
+    container_name: pcb_detector_api
+    ports:
+      - "8001:8000"
+    environment:
+      - MODEL_PATH=/app/runs/detect/pcb_defect_yolov10/weights/best.pt
+    volumes:
+      # Montaje dinamico para leer pesos recien entrenados sin reconstruir la imagen Docker
+      - ./runs:/app/runs
+      - ./dataset:/app/dataset
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
