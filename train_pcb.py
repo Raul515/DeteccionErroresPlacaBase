@@ -1,53 +1,66 @@
-import os
+"""
+train_pcb.py
+~~~~~~~~~~~~
+Entrenamiento de YOLOv10 para detección de defectos en placas PCB.
+Carga todos los hiperparámetros desde config.json (DRY, DIP).
+"""
+
 import torch
 from ultralytics import YOLO
 
-def train():
+from config_loader import CONFIG, resolve_path
+
+
+def train() -> None:
+    """Ejecuta el entrenamiento del modelo con la configuración centralizada."""
     # 1. Verificar soporte de CUDA en GPU
     cuda_available = torch.cuda.is_available()
     device = 0 if cuda_available else "cpu"
     device_name = torch.cuda.get_device_name(0) if cuda_available else "CPU"
-    
+
     print("=" * 60)
     print(f"[INFO] Dispositivo de entrenamiento: {device_name}")
     print(f"[INFO] Aceleracion por GPU (CUDA): {'ACTIVADA' if cuda_available else 'DESACTIVADA'}")
     print("=" * 60)
 
-    # 2. Cargar modelo preentrenado YOLOv10s (o YOLOv8s)
-    model_name = "yolov10s.pt"
+    # 2. Cargar modelo preentrenado
+    model_name = CONFIG["model_base"]
     print(f"[INFO] Cargando modelo base: {model_name}...")
     model = YOLO(model_name)
 
     # 3. Validar ruta del archivo data.yaml
-    yaml_path = os.path.abspath("dataset/data.yaml")
-    if not os.path.exists(yaml_path):
+    yaml_path = resolve_path(CONFIG["dataset_yaml"])
+    if not yaml_path.exists():
         raise FileNotFoundError(
             f"[ERROR] No se encontro el archivo de configuracion en {yaml_path}. "
             f"Ejecuta primero: python download_dataset.py"
         )
 
-    # 4. Hiperparametros optimizados para 4 GB VRAM (GTX 1650)
-    print("[INFO] Iniciando entrenamiento con hiperparametros optimizados para 4 GB VRAM...")
+    # 4. Entrenar con hiperparámetros de config.json
+    train_cfg = CONFIG["training"]
+    print("[INFO] Iniciando entrenamiento con hiperparametros de config.json...")
     _ = model.train(
-        data=yaml_path,
-        epochs=25,             # Epocas de entrenamiento
-        imgsz=640,             # Resolucion de imagen (640x640)
-        batch=4,               # Batch reducido: AMP no es estable en GTX 1650, FP32 usa mas VRAM
-        amp=False,             # Desactivado: GTX 1650 causa NaN con AMP segun Ultralytics
-        workers=0,             # 0 en Windows para evitar bloqueos de multiprocessing
-        device=device,         # GPU 0
-        project="runs/detect",
-        name="pcb_defect_yolov10",
+        data=str(yaml_path),
+        epochs=train_cfg["epochs"],
+        imgsz=train_cfg["imgsz"],
+        batch=train_cfg["batch"],
+        amp=train_cfg["amp"],
+        workers=train_cfg["workers"],
+        device=device,
+        project=train_cfg["project"],
+        name=train_cfg["name"],
         exist_ok=True,
         save=True,
-        plots=True
+        plots=True,
     )
-    
+
+    output_dir = resolve_path(f"{train_cfg['project']}/{train_cfg['name']}")
     print("\n" + "=" * 60)
     print("[OK] Entrenamiento completado!")
     print("[OUTPUT] Los pesos optimizados y las graficas se guardaron en:")
-    print("   runs/detect/pcb_defect_yolov10/")
+    print(f"   {output_dir}")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     train()

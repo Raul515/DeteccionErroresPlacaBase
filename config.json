@@ -1,5 +1,4 @@
 {
-    "project_root": "C:/Users/Raul_515/Desktop/ProyectosAntigravity/DeteccionLosetasStarship",
     "dataset_path": "dataset",
     "dataset_yaml": "dataset/data.yaml",
     "model_base": "yolov10s.pt",
@@ -16,6 +15,7 @@
     "api": {
         "host": "0.0.0.0",
         "port": 8000,
-        "docker_port": 8001
+        "docker_port": 8001,
+        "max_upload_mb": 10
     }
 }
