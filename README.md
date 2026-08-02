@@ -1,7 +1,6 @@
-# Detección de Defectos (Pipeline MLOps con YOLOv10)
-**Proyecto Original:** Visión por computador para analizar las losetas térmicas de la nave Starship. 
+# Detección de Errores en Placas Base (Pipeline MLOps con YOLOv10)
 
-*(Nota: La implementación actual demuestra un pipeline completo de MLOps utilizando un dataset de defectos en placas de circuito impreso (PCB) como prueba de concepto, diseñado para ser fácilmente escalable a cualquier otro dominio de detección de objetos como las losetas de la Starship).*
+Este repositorio contiene un pipeline completo de MLOps utilizando un dataset de defectos en placas de circuito impreso (PCB) para entrenamiento, validación y despliegue del modelo YOLOv10.
 
 ---
 
@@ -17,7 +16,7 @@
 ## 📁 Estructura del Proyecto
 
 ```text
-DeteccionLosetasStarship/
+DeteccionErroresPlacaBase/
 ├── api/
 │   ├── src/
 │   │   └── main.py          # Código principal de la API FastAPI
@@ -127,9 +126,9 @@ Una vez que el contenedor Docker o FastAPI está corriendo, expone los siguiente
 
 El objetivo de este proyecto ha sido establecer una base sólida de **MLOps** que abarque todas las fases del ciclo de vida del machine learning: desde la ingesta de datos hasta el servicio en producción.
 
-**Próximos pasos (Adaptación a Starship):**
-Dado que la arquitectura (YOLOv10 + FastAPI + Docker CUDA) es totalmente agnóstica al tipo de objetos, para cambiar de detectar "Defectos en PCB" a "Análisis de Losetas de Starship", el flujo de trabajo es el siguiente:
-1. Reemplazar la carpeta `dataset/` por las imágenes reales de la Starship anotadas en formato YOLO.
-2. Actualizar las clases en `config.json` y `dataset/data.yaml` (ej. "loseta_sana", "loseta_fracturada", "loseta_faltante").
-3. Ejecutar nuevamente `python train_pcb.py`.
+**Escalabilidad y Adaptación a otros dominios:**
+Dado que la arquitectura (YOLOv10 + FastAPI + Docker CUDA) es totalmente agnóstica al tipo de objetos, para adaptar este pipeline a cualquier otro dominio de detección de objetos, el flujo de trabajo es el siguiente:
+1. Reemplazar la carpeta `dataset/` por las imágenes del nuevo dominio anotadas en formato YOLO.
+2. Actualizar las clases en `config.json` y `dataset/data.yaml` con las nuevas categorías.
+3. Ejecutar nuevamente el entrenamiento (`python train_pcb.py`).
 4. El contenedor en Docker leerá automáticamente los nuevos pesos reiniciándose (gracias al mapeo de volúmenes), sin necesidad de tocar una sola línea de código en la API ni recompilar la imagen de Docker.
