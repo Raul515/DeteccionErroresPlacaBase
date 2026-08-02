@@ -26,6 +26,7 @@ DeteccionLosetasStarship/
 ├── dataset/                 # Dataset generado (entrenamiento y validación)
 ├── runs/detect/             # Artefactos y pesos guardados de YOLOv10
 ├── config.json              # Configuración centralizada del proyecto
+├── config_loader.py         # Módulo cargador de configuración con validación y defaults
 ├── docker-compose.yml       # Orquestador para levantar la API
 ├── download_dataset.py      # Script generador de dataset de prueba
 ├── infer_pcb.py             # Script de validación/inferencia local
@@ -33,6 +34,15 @@ DeteccionLosetasStarship/
 ├── test_api.py              # Script cliente para probar la API
 └── requirements.txt         # Dependencias globales del proyecto local
 ```
+
+---
+
+## 🛠️ Buenas Prácticas y Refactorización (SOLID, Seguridad y Eficiencia)
+El proyecto ha sido refactorizado aplicando patrones modernos:
+- **SOLID (SRP, OCP, DIP)**: El generador de dataset usa un *dispatch dict* extensible sin modificar la lógica (Open/Closed), y funciones modulares de responsabilidad única.
+- **Seguridad en la API**: Validación estricta del tipo y límite de tamaño de archivo (máximo 10 MB configurable) para evitar denegación de servicio (DoS) por memoria.
+- **Eficiencia**: Reemplazo de lógica condicional `if/elif` anidada por mapeos `O(1)`, e incorporación de `pathlib` para asegurar la portabilidad multiplataforma.
+
 
 ---
 

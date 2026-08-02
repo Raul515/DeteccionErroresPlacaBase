@@ -233,4 +233,6 @@ if __name__ == "__main__":
 
     host = os.getenv("API_HOST", "0.0.0.0")
     port = int(os.getenv("API_PORT", "8000"))
-    uvicorn.run("main:app", host=host, port=port, reload=True)
+    app_import = "api.src.main:app" if Path("api/src/main.py").exists() else "main:app"
+    uvicorn.run(app_import, host=host, port=port, reload=True)
+
