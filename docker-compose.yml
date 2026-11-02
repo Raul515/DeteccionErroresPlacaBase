@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   pcb-detector-api:
     build:
@@ -10,10 +8,11 @@ services:
       - "8001:8000"
     environment:
       - MODEL_PATH=/app/runs/detect/pcb_defect_yolov10/weights/best.pt
+      - MAX_UPLOAD_MB=10
     volumes:
-      # Montaje dinamico para leer pesos recien entrenados sin reconstruir la imagen Docker
-      - ./runs:/app/runs
-      - ./dataset:/app/dataset
+      # Montaje de solo lectura para salvaguardar pesos y dataset en producción
+      - ./runs:/app/runs:ro
+      - ./dataset:/app/dataset:ro
     restart: unless-stopped
     deploy:
       resources:
@@ -22,3 +21,4 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+

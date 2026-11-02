@@ -38,6 +38,7 @@ def train() -> None:
 
     # 4. Entrenar con hiperparámetros de config.json
     train_cfg = CONFIG["training"]
+    project_dir = resolve_path(train_cfg["project"])
     print("[INFO] Iniciando entrenamiento con hiperparametros de config.json...")
     _ = model.train(
         data=str(yaml_path),
@@ -47,14 +48,14 @@ def train() -> None:
         amp=train_cfg["amp"],
         workers=train_cfg["workers"],
         device=device,
-        project=train_cfg["project"],
+        project=str(project_dir),
         name=train_cfg["name"],
         exist_ok=True,
         save=True,
         plots=True,
     )
 
-    output_dir = resolve_path(f"{train_cfg['project']}/{train_cfg['name']}")
+    output_dir = project_dir / train_cfg["name"]
     print("\n" + "=" * 60)
     print("[OK] Entrenamiento completado!")
     print("[OUTPUT] Los pesos optimizados y las graficas se guardaron en:")

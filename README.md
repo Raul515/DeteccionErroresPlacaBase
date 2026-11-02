@@ -20,17 +20,19 @@ DeteccionErroresPlacaBase/
 ├── api/
 │   ├── src/
 │   │   └── main.py          # Código principal de la API FastAPI
-│   ├── Dockerfile.gpu       # Dockerfile optimizado para CUDA
+│   ├── Dockerfile.gpu       # Dockerfile optimizado para CUDA con HEALTHCHECK
 │   └── requirements.txt     # Dependencias de la API
 ├── dataset/                 # Dataset generado (entrenamiento y validación)
 ├── runs/detect/             # Artefactos y pesos guardados de YOLOv10
+├── tests/                   # Suite de pruebas unitarias y de integración
+│   └── test_api_suite.py    # Tests automatizados de contrato, seguridad y edge cases
 ├── config.json              # Configuración centralizada del proyecto
 ├── config_loader.py         # Módulo cargador de configuración con validación y defaults
 ├── docker-compose.yml       # Orquestador para levantar la API
 ├── download_dataset.py      # Script generador de dataset de prueba
 ├── infer_pcb.py             # Script de validación/inferencia local
 ├── train_pcb.py             # Script de entrenamiento YOLOv10
-├── test_api.py              # Script cliente para probar la API
+├── test_api.py              # Script cliente para integración end-to-end con la API
 └── requirements.txt         # Dependencias globales del proyecto local
 ```
 
@@ -38,8 +40,12 @@ DeteccionErroresPlacaBase/
 
 ## 🛠️ Buenas Prácticas y Refactorización (SOLID, Seguridad y Eficiencia)
 El proyecto ha sido refactorizado aplicando patrones modernos:
-- **SOLID (SRP, OCP, DIP)**: El generador de dataset usa un *dispatch dict* extensible sin modificar la lógica (Open/Closed), y funciones modulares de responsabilidad única.
-- **Seguridad en la API**: Validación estricta del tipo y límite de tamaño de archivo (máximo 10 MB configurable) para evitar denegación de servicio (DoS) por memoria.
+- **SOLID (SRP, OCP, DIP)**: El generador de dataset usa un *dispatch dict* extensible sin modificar la lógica (Open/Closed), funciones modulares de responsabilidad única, y desacoplamiento de configuración vía inyección de dependencias.
+- **Seguridad en la API**: 
+  - Lectura en streaming por bloques (1 MB) para prevenir ataques de denegación de servicio (DoS) por agotamiento de memoria RAM.
+  - Validación estricta de Content-Type y captura defensiva de imágenes corruptas o bombas de descompresión (400 Bad Request).
+  - CORS habilitado para integración segura con aplicaciones cliente.
+  - Montaje de volúmenes en modo solo lectura (`:ro`) en Docker Compose para salvaguardar pesos y datos en producción.
 - **Eficiencia**: Reemplazo de lógica condicional `if/elif` anidada por mapeos `O(1)`, e incorporación de `pathlib` para asegurar la portabilidad multiplataforma.
 
 
@@ -118,7 +124,19 @@ Una vez que el contenedor Docker o FastAPI está corriendo, expone los siguiente
 - **`POST /detect`**
   Igual que `/predict`, pero en lugar de JSON devuelve la **imagen renderizada** (JPEG) con los cuadros delimitadores, etiquetas y puntajes de confianza pintados directamente sobre ella. Es ideal para validación visual rápida.
 
-> **Prueba automatizada:** Puedes probar todos los endpoints corriendo el script `python test_api.py` desde el entorno host.
+### 🧪 Ejecución de Pruebas
+
+- **Suite de pruebas unitarias y de seguridad (en memoria):**
+  Ejecuta 7 pruebas automáticas que validan contratos de endpoints, esquemas JSON, límites de memoria y rechazo de archivos corruptos sin necesidad de levantar el servidor por red:
+  ```bash
+  python -m unittest discover tests
+  ```
+
+- **Prueba de integración end-to-end con servidor activo:**
+  Con el servidor FastAPI o contenedor Docker levantado:
+  ```bash
+  python test_api.py
+  ```
 
 ---
 

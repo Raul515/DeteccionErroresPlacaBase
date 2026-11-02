@@ -6,6 +6,7 @@ Carga config.json con validación y valores por defecto seguros.
 Todas las rutas se resuelven con pathlib relativas a PROJECT_ROOT.
 """
 
+import copy
 import json
 import logging
 from pathlib import Path
@@ -43,12 +44,12 @@ _DEFAULTS = {
 
 def _deep_merge(defaults: dict, overrides: dict) -> dict:
     """Mezcla recursiva: los valores de overrides sobreescriben defaults."""
-    merged = defaults.copy()
+    merged = copy.deepcopy(defaults)
     for key, value in overrides.items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             merged[key] = _deep_merge(merged[key], value)
         else:
-            merged[key] = value
+            merged[key] = copy.deepcopy(value) if isinstance(value, dict) else value
     return merged
 
 

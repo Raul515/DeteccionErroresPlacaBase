@@ -2,16 +2,26 @@
 test_api.py
 ~~~~~~~~~~~
 Tests de integración para la API de detección de defectos PCB.
-Todas las llamadas HTTP tienen timeout para evitar bloqueos.
+Todas las llamadas HTTP tienen timeout para evitar bloqueos y
+retornan códigos de salida adecuados para integración en CI/CD.
 """
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import requests
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+try:
+    from config_loader import CONFIG, resolve_path
+    _default_url = f"http://localhost:{CONFIG.get('api', {}).get('port', 8000)}"
+    _dataset_val = resolve_path(CONFIG.get("dataset_path", "dataset")) / "val" / "images"
+except ImportError:
+    _default_url = "http://localhost:8000"
+    _dataset_val = Path("dataset/val/images")
+
+API_URL = os.getenv("API_URL", _default_url)
 REQUEST_TIMEOUT = 30  # segundos
 
 
@@ -29,21 +39,20 @@ def test_pipeline() -> None:
         print("=" * 50)
     except requests.ConnectionError as exc:
         print(f"[ERROR] No se pudo conectar con la API en {API_URL}: {exc}")
-        return
+        sys.exit(1)
     except requests.Timeout:
         print(f"[ERROR] Timeout al conectar con {API_URL}")
-        return
+        sys.exit(1)
     except requests.HTTPError as exc:
         print(f"[ERROR] Respuesta inesperada de /health: {exc}")
-        return
+        sys.exit(1)
 
     # 2. Obtener una imagen de prueba
-    val_images_dir = Path("dataset/val/images")
-    val_images = sorted(val_images_dir.glob("*.jpg"))
+    val_images = sorted(_dataset_val.glob("*.jpg"))
 
     if not val_images:
-        print(f"[ERROR] No se encontraron imagenes en {val_images_dir} para probar.")
-        return
+        print(f"[ERROR] No se encontraron imagenes en {_dataset_val} para probar.")
+        sys.exit(1)
 
     test_img_path = val_images[0]
     print(f"\n[INFO TEST] Usando imagen de prueba: {test_img_path}")
@@ -80,6 +89,21 @@ def test_pipeline() -> None:
             )
         else:
             print(f"[ERROR] Error en /detect: {r_det.status_code} - {r_det.text}")
+            sys.exit(1)
+
+    # 5. Probar rechazo de archivos no válidos (Seguridad)
+    r_bad = requests.post(
+        f"{API_URL}/predict",
+        files={"file": ("malicious.txt", b"plain text payload", "text/plain")},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if r_bad.status_code == 400:
+        print("\n4. [SEGURIDAD] Rechazo de archivo no-imagen verificado (HTTP 400 OK)")
+    else:
+        print(f"[ERROR] Esperado 400 en archivo no-imagen, recibido: {r_bad.status_code}")
+        sys.exit(1)
+
+    print("\n[OK] Todas las pruebas de la API pasaron exitosamente.")
 
 
 if __name__ == "__main__":

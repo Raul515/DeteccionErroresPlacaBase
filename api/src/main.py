@@ -3,11 +3,12 @@ api/src/main.py
 ~~~~~~~~~~~~~~~
 API MLOps para detección de defectos en placas PCB con YOLOv10.
 
-Mejoras aplicadas:
-  - DRY: helpers compartidos para lectura de imagen e inferencia.
-  - Seguridad: límite de tamaño de upload configurable.
-  - Logging: reemplaza print() por logging estándar.
-  - Pathlib: rutas modernas y portables.
+Mejoras de seguridad y robustez aplicadas:
+  - Streaming chunked upload: previene ataques DoS por agotamiento de memoria.
+  - Validación de imágenes: captura UnidentifiedImageError y DecompressionBombError devolviendo 400.
+  - CORS Middleware: integración estándar para aplicaciones frontend.
+  - Manejo defensivo de inferencia y hardware (CUDA).
+  - Integración con config_loader y variables de entorno (DIP).
 """
 
 import io
@@ -18,8 +19,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
@@ -35,15 +37,21 @@ logging.basicConfig(
 logger = logging.getLogger("pcb_api")
 
 # ──────────────────────────────────────────────────────────────────────
-# Configuración
+# Configuración Centralizada / Fallback seguro
 # ──────────────────────────────────────────────────────────────────────
 
-# Dentro del contenedor Docker no existe config_loader en la raíz,
-# así que leemos directamente de variables de entorno con fallbacks seguros.
-WEIGHTS_PATH = Path(
-    os.getenv("MODEL_PATH", "runs/detect/pcb_defect_yolov10/weights/best.pt")
-)
-MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "10")) * 1024 * 1024
+try:
+    from config_loader import CONFIG, resolve_path
+    _default_weights = resolve_path(CONFIG.get("weights_path", "runs/detect/pcb_defect_yolov10/weights/best.pt"))
+    _default_max_mb = CONFIG.get("api", {}).get("max_upload_mb", 10)
+except ImportError:
+    _default_weights = Path("runs/detect/pcb_defect_yolov10/weights/best.pt")
+    _default_max_mb = 10
+
+WEIGHTS_PATH = Path(os.getenv("MODEL_PATH", str(_default_weights)))
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", str(_default_max_mb)))
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1 MB por bloque para lectura segura en streaming
 
 # ──────────────────────────────────────────────────────────────────────
 # Carga del modelo
@@ -76,25 +84,34 @@ def _load_model() -> YOLO:
 model = _load_model()
 
 # ──────────────────────────────────────────────────────────────────────
-# App FastAPI
+# App FastAPI y Middlewares
 # ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="PCB Defect Detection API",
     description=(
-        "API MLOps para la deteccion automatizada de defectos "
-        "en placas de circuitos usando YOLOv10"
+        "API MLOps para la detección automatizada de defectos "
+        "en placas de circuitos impresos usando YOLOv10"
     ),
     version="1.0.0",
 )
 
+# Soporte Cross-Origin Resource Sharing (CORS) para clientes web
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ──────────────────────────────────────────────────────────────────────
-# Helpers DRY — lógica compartida entre endpoints
+# Helpers de Validación y Ejecución
 # ──────────────────────────────────────────────────────────────────────
 
 async def _read_and_validate_image(file: UploadFile) -> np.ndarray:
-    """Lee, valida tipo y tamaño, y decodifica la imagen subida.
+    """Lee en streaming, valida tipo y tamaño, y decodifica la imagen subida.
 
     Args:
         file: Archivo subido por el usuario.
@@ -103,30 +120,50 @@ async def _read_and_validate_image(file: UploadFile) -> np.ndarray:
         Imagen como ndarray RGB.
 
     Raises:
-        HTTPException: Si el tipo no es imagen o excede el tamaño máximo.
+        HTTPException: 400 si el tipo no es imagen o el archivo está corrupto.
+        HTTPException: 413 si excede el tamaño máximo permitido.
     """
-    # Validar content-type
+    # 1. Validar Content-Type
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
-            detail="El archivo enviado debe ser una imagen (image/*).",
+            detail="El archivo enviado debe ser una imagen valida (image/*).",
         )
 
-    # Leer contenido y validar tamaño
-    contents = await file.read()
-    if len(contents) > MAX_UPLOAD_BYTES:
-        max_mb = MAX_UPLOAD_BYTES / (1024 * 1024)
+    # 2. Validar tamaño por header si está disponible
+    if file.size and file.size > MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f"La imagen excede el limite de {max_mb:.0f} MB.",
+            detail=f"La imagen excede el limite maximo de {MAX_UPLOAD_MB} MB.",
         )
 
-    image = Image.open(io.BytesIO(contents)).convert("RGB")
-    return np.array(image)
+    # 3. Leer contenido en bloques para prevenir agotamiento de memoria (DoS)
+    contents = bytearray()
+    while chunk := await file.read(UPLOAD_CHUNK_SIZE):
+        contents.extend(chunk)
+        if len(contents) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"La imagen excede el limite maximo de {MAX_UPLOAD_MB} MB.",
+            )
+
+    # 4. Decodificar la imagen de forma segura
+    try:
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        img_np = np.array(image)
+        if img_np.size == 0 or img_np.ndim != 3:
+            raise ValueError("Dimensiones de imagen no validas.")
+        return img_np
+    except (UnidentifiedImageError, Image.DecompressionBombError, ValueError, OSError) as exc:
+        logger.warning("Error decodificando imagen '%s': %s", file.filename, exc)
+        raise HTTPException(
+            status_code=400,
+            detail="El archivo proporcionado no es una imagen valida o se encuentra corrupto.",
+        )
 
 
 def _run_inference(img_np: np.ndarray, conf: float) -> Results:
-    """Ejecuta inferencia YOLO sobre una imagen numpy.
+    """Ejecuta inferencia YOLO sobre una imagen numpy con manejo de errores.
 
     Args:
         img_np: Imagen como ndarray RGB.
@@ -136,18 +173,24 @@ def _run_inference(img_np: np.ndarray, conf: float) -> Results:
         Objeto Results de Ultralytics.
 
     Raises:
-        HTTPException: Si la inferencia produce un resultado inesperado.
+        HTTPException: Si la inferencia produce un fallo interno.
     """
-    results = list(model.predict(source=img_np, conf=conf, verbose=False))
-    result = results[0]
-
-    if not isinstance(result, Results):
+    try:
+        results = list(model.predict(source=img_np, conf=conf, verbose=False))
+        if not results or not isinstance(results[0], Results):
+            raise HTTPException(
+                status_code=500,
+                detail="Error inesperado en la inferencia del modelo.",
+            )
+        return results[0]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Error durante la inferencia: %s", exc)
         raise HTTPException(
             status_code=500,
-            detail="Error inesperado en la inferencia del modelo.",
+            detail=f"Fallo interno durante la inferencia: {exc}",
         )
-
-    return result
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -158,7 +201,11 @@ def _run_inference(img_np: np.ndarray, conf: float) -> Results:
 def health_check():
     """Endpoint de estado del servicio y dispositivo hardware."""
     cuda_available = torch.cuda.is_available()
-    device_name = torch.cuda.get_device_name(0) if cuda_available else "CPU"
+    try:
+        device_name = torch.cuda.get_device_name(0) if cuda_available else "CPU"
+    except Exception:
+        device_name = "CUDA (dispositivo no consultable)"
+
     loaded_path = str(WEIGHTS_PATH) if WEIGHTS_PATH.exists() else FALLBACK_MODEL
 
     return {

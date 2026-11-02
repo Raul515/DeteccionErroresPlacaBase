@@ -37,20 +37,21 @@ def run_inference() -> None:
     print(f"[INFO] Ejecutando inferencia sobre {len(val_images)} imagenes de prueba...")
 
     # 3. Realizar predicción (primeras 5 imágenes)
+    output_project = resolve_path("runs/detect")
     source = [str(p) for p in val_images[:5]]
     _ = model.predict(
         source=source,
         conf=0.25,
         save=True,
-        project="runs",
-        name="detect/inference_results",
+        project=str(output_project),
+        name="inference_results",
         exist_ok=True,
     )
 
     print("\n" + "=" * 60)
     print("[OK] Inferencias completadas con exito!")
     print("[OUTPUT] Las imagenes anotadas con cuadros delimitadores se guardaron en:")
-    print("   runs/detect/inference_results/")
+    print(f"   {output_project / 'inference_results'}")
     print("=" * 60)
 
 
